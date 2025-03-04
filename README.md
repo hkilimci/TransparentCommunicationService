@@ -67,6 +67,11 @@ tcs endpoint=<RemoteIPAddress> port=<RemotePort> [localport=<LocalPort>] [buffer
 Forward connections from local port 1209 to remote endpoint 192.168.1.45:4545:
 
 ```
+tcs 192.168.1.45 4545
+```
+or
+
+```
 tcs endpoint=192.168.1.45 port=4545
 ```
 
