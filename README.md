@@ -103,6 +103,7 @@ tcs <RemoteIPAddress> <RemotePort>
 
 ## Use Cases
 
+- Overcome local VPN limitations
 - Testing network applications
 - Debugging network communication
 - Port forwarding in development environments
