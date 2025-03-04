@@ -78,8 +78,6 @@ namespace TransparentCommunicationService
 
         private static bool TryProcessArgument(string arg, ref ProxyConfiguration config)
         {
-            arg = arg.ToLower();
-
             // Parameter validation definitions
             var parameterHandlers = new Dictionary<string, (Func<string, object?> parser, Action<ProxyConfiguration, object> setter, string errorMessage)>
             {
