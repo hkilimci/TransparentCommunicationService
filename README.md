@@ -4,7 +4,14 @@ A flexible, high-performance TCP proxy application for transparent network commu
 
 ## Overview
 
-Transparent Communication Service (TCS) is a lightweight TCP proxy tool written in C# using .NET 8.0. It allows you to forward network connections between local and remote endpoints with configurable parameters such as buffer size and connection timeout.
+Transparent Communication Service (TCS) is a lightweight TCP proxy tool written in C# using .NET 8.0. It allows you to forward network connections between local and remote endpoints with configurable parameters such as buffer size and connection timeout. It acts as a transparent TCP proxy, allowing client applications to communicate with remote modems as if they were directly connected. It listens on a local port and forwards all incoming traffic to a specified remote modem, relaying responses back seamlessly. So, it allows existing applications to communicate with modems behind firewalls or VPNs without modification.
+
+- ✅ Plug-and-play – No installation or configuration needed.
+- ✅ Portable – Runs as a standalone executable.
+- ✅ Flexible – Supports dynamic remote IP and port selection.
+- ✅ Seamless communication – Behaves just like a real modem.
+
+Ideal for developers, system integrators, and debugging modem communications in restricted environments. 🚀
 
 ## Features
 
@@ -13,7 +20,7 @@ Transparent Communication Service (TCS) is a lightweight TCP proxy tool written 
 - **Hex Logging**: View incoming and outgoing network packets in hex format for debugging
 - **Performance Optimized**: Designed for efficient data transmission with configurable buffer sizes
 - **Command-Line Interface**: Easy to use from terminal or scripts
-- **Legacy Format Support**: Maintains backward compatibility with simpler command format
+- **Legacy Format Support**: Runs with a simpler command format
 
 ## Requirements
 
@@ -101,10 +108,10 @@ tcs <RemoteIPAddress> <RemotePort>
 
 ## How It Works
 
-1. TCS starts a TCP listener on the specified local port
-2. When a client connects to the local port, TCS establishes a connection to the remote endpoint
-3. Data is forwarded bidirectionally between the client and the remote endpoint
-4. All traffic is logged (optionally in hex format) for debugging purposes
+1. TCS starts a TCP listener on the specified local port.
+2. When a client connects to the local port, TCS establishes a connection to the remote endpoint.
+3. Data is forwarded bidirectionally between the client and the remote endpoint, making it behave like a virtual modem.
+4. All traffic is logged (optionally in hex format) for debugging purposes.
 
 ## Use Cases
 
