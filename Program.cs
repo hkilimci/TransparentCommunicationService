@@ -2,6 +2,7 @@ using System.Net.Sockets;
 using System.Net;
 using System.Text;
 using System.Collections.Generic;
+using System.IO;
 
 namespace TransparentCommunicationService
 {
@@ -11,19 +12,25 @@ namespace TransparentCommunicationService
         {
             DisplayWelcomeMessage();
 
-            // Parse command line arguments
-            if (!TryParseCommandLineArguments(args, out var config))
+            // Show usage if --help or -h is specified
+            if (args.Length > 0 && (args[0].Equals("--help", StringComparison.OrdinalIgnoreCase) || args[0].Equals("-h", StringComparison.OrdinalIgnoreCase)))
             {
-                return; // Error messages and usage info already displayed by the parsing method
+                ConfigurationManager.ShowUsage();
+                return;
             }
 
             try
             {
+                // Load configuration from all sources (args > file > console)
+                var config = ConfigurationManager.LoadConfiguration(args);
+                
+                // Run the proxy server with the loaded configuration
                 await RunProxyServer(config);
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error: {ex.Message}");
+                ConfigurationManager.ShowUsage();
             }
         }
 
@@ -31,143 +38,6 @@ namespace TransparentCommunicationService
         {
             Console.WriteLine("Transparent TCP Proxy - Virtual Modem Relay");
             Console.WriteLine("-------------------------------------------");
-        }
-
-        private static bool TryParseCommandLineArguments(string[] args, out ProxyConfiguration config)
-        {
-            // Initialize with default values
-            config = new ProxyConfiguration
-            {
-                BufferSize = Constants.DefaultBufferSize,
-                LocalPort = Constants.DefaultLocalPort,
-                Timeout = Constants.DefaultTimeout
-            };
-
-            // Handle empty arguments
-            if (args.Length == 0)
-            {
-                ShowUsage();
-                return false;
-            }
-
-            foreach (string arg in args)
-            {
-                if (!TryProcessArgument(arg, ref config))
-                {
-                    return false;
-                }
-            }
-
-            // Validate required parameters
-            if (config.RemoteIpAddress == null)
-            {
-                Console.WriteLine("Error: Remote IP address is required.");
-                ShowUsage();
-                return false;
-            }
-
-            if (config.RemotePort == 0)
-            {
-                Console.WriteLine("Error: Remote port is required.");
-                ShowUsage();
-                return false;
-            }
-
-            return true;
-        }
-
-        private static bool TryProcessArgument(string arg, ref ProxyConfiguration config)
-        {
-            arg = arg.ToLower();
-
-            // Parameter validation definitions
-            var parameterHandlers = new Dictionary<string, (Func<string, object?> parser, Action<ProxyConfiguration, object> setter, string errorMessage)>
-            {
-                // IP Address parameter
-                [Constants.Endpoint] = (
-                    // Parser
-                    value => IPAddress.TryParse(value, out IPAddress? ip) ? ip : null,
-                    // Setter
-                    (cfg, val) => cfg.RemoteIpAddress = (IPAddress?)val,
-                    // Error message
-                    "Invalid remote IP address format: {0}"
-                ),
-                
-                // Remote port parameter
-                [Constants.Port] = (
-                    value => TryParsePort(value, out int port) ? (object)port : null,
-                    (cfg, val) => cfg.RemotePort = (int)val,
-                    "Remote port must be between 1 and 65535: {0}"
-                ),
-                
-                // Local port parameter
-                [Constants.LocalPort] = (
-                    value => TryParsePort(value, out int port) ? (object)port : null,
-                    (cfg, val) => cfg.LocalPort = (int)val,
-                    "Local port must be between 1 and 65535: {0}"
-                ),
-                
-                // Buffer size parameter
-                [Constants.BufferSize] = (
-                    value => int.TryParse(value, out int size) && size > 0 ? (object)size : null,
-                    (cfg, val) => cfg.BufferSize = (int)val,
-                    "Buffer size must be a positive integer: {0}"
-                ),
-                
-                // Timeout parameter
-                [Constants.Timeout] = (
-                    value => int.TryParse(value, out int timeout) && timeout >= 0 ? (object)timeout : null,
-                    (cfg, val) => cfg.Timeout = (int)val,
-                    "Timeout must be a non-negative integer: {0}"
-                )
-            };
-
-            // Try to process as a named parameter
-            foreach (var handler in parameterHandlers)
-            {
-                string prefix = $"{handler.Key}=";
-                if (arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    string value = arg.Substring(prefix.Length);
-                    var (parser, setter, errorMessage) = handler.Value;
-                    
-                    // Parse the value
-                    object? parsedValue = parser(value);
-                    if (parsedValue == null)
-                    {
-                        Console.WriteLine($"Error: {string.Format(errorMessage, value)}");
-                        ShowUsage();
-                        return false;
-                    }
-                    
-                    // Set the value in the configuration
-                    setter(config, parsedValue);
-                    return true;
-                }
-            }
-
-            // Handle legacy positional parameters
-            if (config.RemoteIpAddress == null && IPAddress.TryParse(arg, out IPAddress? ipAddress))
-            {
-                config.RemoteIpAddress = ipAddress;
-                return true;
-            }
-            
-            if (config.RemotePort == 0 && TryParsePort(arg, out int port))
-            {
-                config.RemotePort = port;
-                return true;
-            }
-
-            // If we get here, the argument wasn't recognized
-            Console.WriteLine($"Error: Unrecognized or invalid parameter: {arg}");
-            ShowUsage();
-            return false;
-        }
-
-        private static bool TryParsePort(string value, out int port)
-        {
-            return int.TryParse(value, out port) && port >= 1 && port <= 65535;
         }
 
         private static async Task RunProxyServer(ProxyConfiguration config)
@@ -211,11 +81,16 @@ namespace TransparentCommunicationService
 
         private static void DisplayServerStartInfo(ProxyConfiguration config)
         {
-            Console.WriteLine($"Proxy started. Listening on localhost:{config.LocalPort}");
-            Console.WriteLine($"Forwarding connections to {config.RemoteIpAddress}:{config.RemotePort}");
-            Console.WriteLine($"Buffer size: {config.BufferSize} bytes, Timeout: {config.Timeout} seconds");
-            Console.WriteLine("Press Ctrl+C to exit.");
-            Console.WriteLine();
+            Console.WriteLine("\n=== Transparent Communication Service Started ===");
+            Console.WriteLine($"Listening on: localhost:{config.LocalPort}");
+            Console.WriteLine($"Forwarding to: {config.RemoteIpAddress}:{config.RemotePort}");
+            Console.WriteLine("\nActive Configuration:");
+            Console.WriteLine($"  Local Port: {config.LocalPort}");
+            Console.WriteLine($"  Remote Endpoint: {config.RemoteIpAddress}:{config.RemotePort}");
+            Console.WriteLine($"  Buffer Size: {config.BufferSize} bytes");
+            Console.WriteLine($"  Timeout: {config.Timeout} seconds");
+            Console.WriteLine("\nPress Ctrl+C to exit.");
+            Console.WriteLine("");
         }
 
         private static async Task AcceptClientsLoop(TcpListener listener, ProxyConfiguration config, CancellationToken token)
@@ -336,22 +211,6 @@ namespace TransparentCommunicationService
             }
 
             Console.WriteLine(sb.ToString());
-        }
-
-        private static void ShowUsage()
-        {
-            Console.WriteLine($"\nUsage:");
-            Console.WriteLine($"  tcs {Constants.Endpoint}=<RemoteIPAddress> {Constants.Port}=<RemotePort> [{Constants.LocalPort}=<LocalPort>] [{Constants.BufferSize}=<BufferSize>] [{Constants.Timeout}=<TimeoutSeconds>]");
-            Console.WriteLine($"\nParameters:");
-            Console.WriteLine($"  {Constants.Endpoint}=<RemoteIPAddress>\t- The IP address of the target modem");
-            Console.WriteLine($"  {Constants.Port}=<RemotePort>\t\t- The port of the modem to forward traffic to");
-            Console.WriteLine($"  {Constants.LocalPort}=<LocalPort>\t\t- (Optional) The local port to listen on (default: {Constants.DefaultLocalPort})");
-            Console.WriteLine($"  {Constants.BufferSize}=<BufferSize>\t\t- (Optional) Buffer size for data transmission (default: {Constants.DefaultBufferSize})");
-            Console.WriteLine($"  {Constants.Timeout}=<TimeoutSeconds>\t- (Optional) Connection timeout in seconds (default: {Constants.DefaultTimeout})");
-            Console.WriteLine($"\nExample:");
-            Console.WriteLine($"  tcs {Constants.Endpoint}=192.168.1.45 {Constants.Port}=4545 {Constants.LocalPort}=1209 {Constants.Timeout}=60 {Constants.BufferSize}=16384");
-            Console.WriteLine($"\nAlso supports legacy format:");
-            Console.WriteLine($"  tcs <RemoteIPAddress> <RemotePort>");
         }
     }
 }

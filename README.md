@@ -17,10 +17,11 @@ Ideal for developers, system integrators, and debugging modem communications in 
 
 - **Simple TCP Forwarding**: Easily forward TCP traffic from a local port to a remote endpoint
 - **Flexible Configuration**: Configure remote IP, remote port, local port, buffer size, and connection timeout
+- **Multiple Configuration Sources**: Load settings from command-line, settings file, or interactive console input
 - **Hex Logging**: View incoming and outgoing network packets in hex format for debugging
 - **Performance Optimized**: Designed for efficient data transmission with configurable buffer sizes
 - **Command-Line Interface**: Easy to use from terminal or scripts
-- **Legacy Format Support**: Runs with a simpler command format
+- **Legacy Format Support**: Maintains backward compatibility with simpler command format
 
 ## Requirements
 
@@ -57,6 +58,16 @@ dotnet run --project TransparentCommunicationService.csproj
 tcs endpoint=<RemoteIPAddress> port=<RemotePort> [localport=<LocalPort>] [buffer=<BufferSize>] [timeout=<TimeoutSeconds>]
 ```
 
+### Configuration Sources
+
+TCS supports multiple ways to provide configuration parameters, in the following priority order:
+
+1. **Command-line arguments** (highest priority)
+2. **Settings file** (tcs-settings.json in the application directory)
+3. **Interactive console input** (for missing required parameters)
+
+If a parameter is specified in multiple sources, the highest priority source will be used.
+
 ### Parameters
 
 | Parameter | Description | Default |
@@ -66,6 +77,22 @@ tcs endpoint=<RemoteIPAddress> port=<RemotePort> [localport=<LocalPort>] [buffer
 | `localport` | The local port to listen on | 1209 |
 | `buffer` | Buffer size for data transmission (in bytes) | 8192 |
 | `timeout` | Connection timeout in seconds | 30 |
+
+### Settings File Format
+
+TCS can read configuration from a JSON settings file named `tcs-settings.json` in the application directory:
+
+```json
+{
+  "endpoint": "192.168.1.45",
+  "port": 4545,
+  "localPort": 1209,
+  "bufferSize": 16384,
+  "timeout": 60
+}
+```
+
+The settings file is automatically created when you choose to save your configuration during interactive console setup. A sample settings file (`tcs-settings.sample.json`) is also included in the distribution to help you get started.
 
 ### Examples
 
