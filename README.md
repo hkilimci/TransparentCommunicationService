@@ -10,6 +10,7 @@ Transparent Communication Service (TCS) is a lightweight TCP proxy tool written 
 - ✅ Portable – Runs as a standalone executable.
 - ✅ Flexible – Supports dynamic remote IP and port selection.
 - ✅ Seamless communication – Behaves just like a real modem.
+- ✅ Enhanced logging – File logging with configurable options.
 
 Ideal for developers, system integrators, and debugging modem communications in restricted environments. 🚀
 
@@ -18,6 +19,11 @@ Ideal for developers, system integrators, and debugging modem communications in 
 - **Simple TCP Forwarding**: Easily forward TCP traffic from a local port to a remote endpoint
 - **Flexible Configuration**: Configure remote IP, remote port, local port, buffer size, and connection timeout
 - **Multiple Configuration Sources**: Load settings from command-line, settings file, or interactive console input
+- **Enhanced Logging System**:
+  - Console and file-based logging
+  - Configurable data payload logging
+  - Option for separate data transmission logs
+  - Organized logs in a dedicated directory
 - **Hex Logging**: View incoming and outgoing network packets in hex format for debugging
 - **Performance Optimized**: Designed for efficient data transmission with configurable buffer sizes
 - **Command-Line Interface**: Easy to use from terminal or scripts
@@ -55,7 +61,7 @@ dotnet run --project TransparentCommunicationService.csproj
 ### Command Format
 
 ```
-tcs endpoint=<RemoteIPAddress> port=<RemotePort> [localport=<LocalPort>] [buffer=<BufferSize>] [timeout=<TimeoutSeconds>]
+tcs endpoint=<RemoteIPAddress> port=<RemotePort> [localport=<LocalPort>] [buffer=<BufferSize>] [timeout=<TimeoutSeconds>] [enablefilelogging=<EnableFileLogging>] [separatedatalogs=<SeparateDataLogs>] [logdatapayload=<LogDataPayload>]
 ```
 
 ### Configuration Sources
@@ -63,7 +69,7 @@ tcs endpoint=<RemoteIPAddress> port=<RemotePort> [localport=<LocalPort>] [buffer
 TCS supports multiple ways to provide configuration parameters, in the following priority order:
 
 1. **Command-line arguments** (highest priority)
-2. **Settings file** (tcs-settings.json in the application directory)
+2. **Settings file** (settings.json in the application directory)
 3. **Interactive console input** (for missing required parameters)
 
 If a parameter is specified in multiple sources, the highest priority source will be used.
@@ -77,22 +83,40 @@ If a parameter is specified in multiple sources, the highest priority source wil
 | `localport` | The local port to listen on | 1209 |
 | `buffer` | Buffer size for data transmission (in bytes) | 8192 |
 | `timeout` | Connection timeout in seconds | 30 |
+| `enablefilelogging` | Enable logging to file | true |
+| `separatedatalogs` | Create separate log files for data transmissions | false |
+| `logdatapayload` | Include data payload in logs | true |
 
 ### Settings File Format
 
-TCS can read configuration from a JSON settings file named `tcs-settings.json` in the application directory:
+TCS can read configuration from a JSON settings file named `settings.json` in the application directory:
 
 ```json
 {
-  "endpoint": "192.168.1.45",
-  "port": 4545,
+  "endpoint": "127.0.0.1",
+  "port": 1987,
   "localPort": 1209,
-  "bufferSize": 16384,
-  "timeout": 60
+  "bufferSize": 8192,
+  "timeout": 30,
+  "enableFileLogging": true,
+  "logDataPayload": true,
+  "separateDataLogs": false
 }
 ```
 
-The settings file is automatically created when you choose to save your configuration during interactive console setup. A sample settings file (`tcs-settings.sample.json`) is also included in the distribution to help you get started.
+The settings file is automatically created when you choose to save your configuration during interactive console setup.
+
+### Logging
+
+TCS includes an enhanced logging system with the following features:
+
+- **Console Logging**: All events are logged to the console
+- **File Logging**: When enabled, logs are written to files in a `logs` directory
+- **Main Log File**: Contains general information, errors, and connection events
+- **Data Log File**: When separate data logging is enabled, data transmissions are stored in a dedicated file
+- **Data Payload Logging**: Configure whether to include the full data payload in logs
+
+Log files are named based on the remote endpoint information to make it easy to identify logs for specific connections.
 
 ### Examples
 
@@ -119,10 +143,10 @@ tcs endpoint=192.168.1.45 port=4545 localport=8080
 
 #### Advanced Configuration
 
-Configure with larger buffer and longer timeout:
+Configure with larger buffer, longer timeout, and custom logging options:
 
 ```
-tcs endpoint=192.168.1.45 port=4545 localport=1209 timeout=60 buffer=16384
+tcs endpoint=192.168.1.45 port=4545 localport=1209 timeout=60 buffer=16384 enablefilelogging=true separatedatalogs=true logdatapayload=true
 ```
 
 #### Legacy Format
@@ -139,6 +163,7 @@ tcs <RemoteIPAddress> <RemotePort>
 2. When a client connects to the local port, TCS establishes a connection to the remote endpoint.
 3. Data is forwarded bidirectionally between the client and the remote endpoint, making it behave like a virtual modem.
 4. All traffic is logged (optionally in hex format) for debugging purposes.
+5. If file logging is enabled, logs are stored in the `logs` directory.
 
 ## Use Cases
 
@@ -148,6 +173,7 @@ tcs <RemoteIPAddress> <RemotePort>
 - Port forwarding in development environments
 - Network traffic inspection
 - Creating transparent proxies for legacy applications
+- Protocol analysis with enhanced logging
 
 ## Contributing
 

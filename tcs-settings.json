@@ -1,7 +1,0 @@
-{
-  "endpoint": "192.168.1.45",
-  "port": 4545,
-  "localPort": 1209,
-  "bufferSize": 8192,
-  "timeout": 30
-}

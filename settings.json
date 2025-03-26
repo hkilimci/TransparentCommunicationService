@@ -1,0 +1,10 @@
+{
+  "endpoint": "127.0.0.1",
+  "port": 1987,
+  "localPort": 1209,
+  "bufferSize": 8192,
+  "timeout": 30,
+  "enableFileLogging": true,
+  "logDataPayload": true,
+  "separateDataLogs": false
+}
