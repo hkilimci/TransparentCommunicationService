@@ -22,7 +22,7 @@ internal static class Logger
         EnsureLogDirectoryExists(config.LogFilePath);
             
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
-        WriteToFile($"=== Transparent Communication Service Log Started at {timestamp} ===\n");
+        WriteLog($"=== Transparent Communication Service Log Started at {timestamp} ===\n");
             
         // Initialize data log file if separate logging is enabled
         if (!config.SeparateDataLogs)
@@ -68,7 +68,6 @@ internal static class Logger
         }
 
         var logMessage = sb.ToString();
-        Console.WriteLine(logMessage);
         
         // If separate data logs are enabled, write to the data log file
         if (_config?.SeparateDataLogs ?? false)
@@ -77,7 +76,7 @@ internal static class Logger
         }
 
         // Write to the main log file
-        WriteToFile(logMessage);
+        WriteLog(logMessage, ConsoleColor.DarkCyan);
     }
         
     public static void LogInfo(string message)
@@ -87,8 +86,27 @@ internal static class Logger
             DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture), 
             message);
         
-        Console.WriteLine(formattedMessage);
-        WriteToFile(formattedMessage);
+        WriteLog(formattedMessage);
+    }
+    
+    public static void LogWarning(string message)
+    {
+        var formattedMessage = string.Format(CultureInfo.InvariantCulture, 
+            "{0} [WARNING] {1}", 
+            DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture), 
+            message);
+        
+        WriteLog(formattedMessage, ConsoleColor.DarkYellow);
+    }
+    
+    public static void LogSuccess(string message)
+    {
+        var formattedMessage = string.Format(CultureInfo.InvariantCulture, 
+            "{0} [SUCCESS] {1}", 
+            DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture), 
+            message);
+        
+        WriteLog(formattedMessage, ConsoleColor.DarkGreen);
     }
     
     public static void LogError(string message, Exception? ex = null)
@@ -106,15 +124,14 @@ internal static class Logger
                 formattedMessage += $"\n{ex.StackTrace}";
             }
         }
-        
-        Console.WriteLine(formattedMessage);
-        WriteToFile(formattedMessage);
+
+        WriteLog(formattedMessage, ConsoleColor.DarkRed);
     }
         
     public static void DisplayWelcomeMessage()
     {
-        Console.WriteLine("Transparent TCP Proxy - Virtual Modem Relay");
-        Console.WriteLine("-------------------------------------------");
+        WriteLog("Transparent TCP Proxy - Virtual Modem Relay");
+        WriteLog("-------------------------------------------");
     }
         
     public static void DisplayServerStartInfo(ProxyConfiguration config)
@@ -142,14 +159,19 @@ internal static class Logger
         
         sb.AppendLine("\n\nPress Ctrl+C to exit.\n");
         
-        var message = sb.ToString();
-        
-        Console.WriteLine(message);
-        WriteToFile(message);
+        WriteLog(sb.ToString());
     }
     
-    private static void WriteToFile(string message)
+    private static void WriteLog(string message, ConsoleColor? color = null)
     {
+        if (color.HasValue)
+        {
+            Console.ForegroundColor = color.Value;
+        }
+        
+        Console.WriteLine(message);
+        Console.ResetColor();
+        
         // Skip file writing if file logging is disabled
         if (_config is not { EnableFileLogging: true })
         {
@@ -171,7 +193,9 @@ internal static class Logger
         catch (Exception ex)
         {
             // Don't use LogError to avoid infinite recursion
+            Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"Error writing to log file: {ex.Message}");
+            Console.ResetColor();
         }
     }
     
@@ -198,7 +222,9 @@ internal static class Logger
         catch (Exception ex)
         {
             // Don't use LogError to avoid infinite recursion
+            Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"Error writing to data log file: {ex.Message}");
+            Console.ResetColor();
         }
     }
     
