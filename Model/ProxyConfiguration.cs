@@ -1,4 +1,3 @@
-using System.Net;
 using TransparentCommunicationService.Helpers;
 
 namespace TransparentCommunicationService.Model;
@@ -6,10 +5,9 @@ namespace TransparentCommunicationService.Model;
 /// <summary>
 /// Configuration class to hold all proxy settings
 /// </summary>
-internal class ProxyConfiguration
+internal sealed class ProxyConfiguration
 {
-    public IPAddress? RemoteIpAddress { get; set; }
-    public int RemotePort { get; set; }
+    public List<RemoteEndpoint> RemoteEndpoints { get; set; } = new();
     public int LocalPort { get; set; }
     public int BufferSize { get; set; }
     public int Timeout { get; set; }
@@ -20,14 +18,21 @@ internal class ProxyConfiguration
     { 
         get
         {
-            if (RemoteIpAddress == null)
+            // If there is more than one remote endpoint, use a generic log file name
+            if (RemoteEndpoints.Count > 1)
             {
-                return Path.Combine(Constants.App.LogsDir, $"tcs.log");
+                return Path.Combine(Constants.App.LogsDir, "tcs_multi_endpoint.log");
+            }
+
+            var firstEndpoint = RemoteEndpoints.FirstOrDefault();
+            if (firstEndpoint == null)
+            {
+                return Path.Combine(Constants.App.LogsDir, "tcs.log");
             }
                 
             // Create a safe filename by replacing any invalid characters
-            var safeIp = RemoteIpAddress.ToString().Replace('.', '-');
-            return Path.Combine(Constants.App.LogsDir, $"tcs_{safeIp}_{RemotePort}.log");
+            var safeIp = firstEndpoint.IpAddress.ToString().Replace('.', '-');
+            return Path.Combine(Constants.App.LogsDir, $"tcs_{safeIp}_{firstEndpoint.Port}.log");
         }
     }
         
@@ -40,15 +45,22 @@ internal class ProxyConfiguration
             {
                 return LogFilePath;
             }
-                
-            if (RemoteIpAddress == null)
+            
+            // If there is more than one remote endpoint, use a generic data log file name
+            if (RemoteEndpoints.Count > 1)
+            {
+                return Path.Combine(Constants.App.LogsDir, "tcs_multi_endpoint_data.log");
+            }
+
+            var firstEndpoint = RemoteEndpoints.FirstOrDefault();
+            if (firstEndpoint == null)
             {
                 return Path.Combine(Constants.App.LogsDir, "tcs_data.log");
             }
                 
             // Create a safe filename by replacing any invalid characters
-            var safeIp = RemoteIpAddress.ToString().Replace('.', '-');
-            return Path.Combine(Constants.App.LogsDir, $"tcs_data_{safeIp}_{RemotePort}.log");
+            var safeIp = firstEndpoint.IpAddress.ToString().Replace('.', '-');
+            return Path.Combine(Constants.App.LogsDir, $"tcs_data_{safeIp}_{firstEndpoint.Port}.log");
         }
     }
         

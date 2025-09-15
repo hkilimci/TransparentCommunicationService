@@ -139,10 +139,10 @@ internal static class Logger
         var sb = new StringBuilder();
         sb.AppendLine("\n=== Transparent Communication Service Started ===");
         sb.Append(CultureInfo.InvariantCulture, $"Listening on: localhost:{config.LocalPort}\n");
-        sb.Append(CultureInfo.InvariantCulture, $"Forwarding to: {config.RemoteIpAddress}:{config.RemotePort}\n\n");
+        sb.Append(CultureInfo.InvariantCulture, $"Forwarding to: {string.Join(",", config.RemoteEndpoints.Select(s=>s.IpAddress + ":" + s.Port).ToList())}\n\n");
         sb.AppendLine("Active Configuration:");
         sb.Append(CultureInfo.InvariantCulture, $"  Local Port: {config.LocalPort}\n");
-        sb.Append(CultureInfo.InvariantCulture, $"  Remote Endpoint: {config.RemoteIpAddress}:{config.RemotePort}\n");
+        sb.Append(CultureInfo.InvariantCulture, $"  Remote Endpoint: {string.Join(",", config.RemoteEndpoints.Select(s=>s.IpAddress + ":" + s.Port).ToList())}\n");
         sb.Append(CultureInfo.InvariantCulture, $"  Buffer Size: {config.BufferSize} bytes\n");
         sb.Append(CultureInfo.InvariantCulture, $"  Timeout: {config.Timeout} seconds\n");
         sb.Append(CultureInfo.InvariantCulture, $"  File Logging: {(config.EnableFileLogging ? "Enabled" : "Disabled")}");

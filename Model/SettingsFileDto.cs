@@ -5,13 +5,10 @@ namespace TransparentCommunicationService.Model
     /// <summary>
     /// Data transfer object for settings file serialization/deserialization
     /// </summary>
-    internal class SettingsFileDto
+    internal sealed class SettingsFileDto
     {
-        [JsonPropertyName("endpoint")]
-        public string? Endpoint { get; init; }
-        
-        [JsonPropertyName("port")]
-        public int? Port { get; init; }
+        [JsonPropertyName("endpoints")]
+        public List<string>? Endpoints { get; init; }
         
         [JsonPropertyName("localPort")]
         public int? LocalPort { get; init; }

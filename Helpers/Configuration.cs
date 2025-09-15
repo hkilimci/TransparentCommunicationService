@@ -45,7 +45,7 @@ internal static class Configuration
         }
         
         // Finally, prompt for any missing required values (if no command line args provided)
-        if (args.Length == 0 || config.RemoteIpAddress == null || config.RemotePort == 0)
+        if (args.Length == 0 || config.RemoteEndpoints.Count == 0)
         {
             PromptForMissingValues(ref config);
         }
@@ -77,14 +77,19 @@ internal static class Configuration
             }
 
             // Apply settings from file if they exist
-            if (!string.IsNullOrEmpty(settingsDto.Endpoint) && IPAddress.TryParse(settingsDto.Endpoint, out var ipAddress))
+            if (settingsDto.Endpoints != null)
             {
-                config.RemoteIpAddress = ipAddress;
-            }
-
-            if (settingsDto.Port is >= 1 and <= 65535)
-            {
-                config.RemotePort = settingsDto.Port.Value;
+                foreach (var endpointStr in settingsDto.Endpoints)
+                {
+                    if (TryParseEndpoint(endpointStr, out var endpoint))
+                    {
+                        config.RemoteEndpoints.Add(endpoint);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Warning: Invalid endpoint format in settings file: {endpointStr}");
+                    }
+                }
             }
 
             if (settingsDto.LocalPort is >= 1 and <= 65535)
@@ -135,8 +140,7 @@ internal static class Configuration
         {
             var settingsDto = new SettingsFileDto
             {
-                Endpoint = config.RemoteIpAddress?.ToString(),
-                Port = config.RemotePort,
+                Endpoints = config.RemoteEndpoints.Select(e => $"{e.IpAddress}:{e.Port}").ToList(),
                 LocalPort = config.LocalPort,
                 BufferSize = config.BufferSize,
                 Timeout = config.Timeout,
@@ -161,24 +165,6 @@ internal static class Configuration
     /// </summary>
     private static void TryParseCommandLineArguments(string[] args, ref ProxyConfiguration config)
     {
-        // Check for legacy format (2 or 3 positional arguments)
-        if (args.Length >= 2 && !args[0].Contains('=') && !args[1].Contains('='))
-        {
-            // First argument should be IP address
-            if (IPAddress.TryParse(args[0], out var ipAddress))
-            {
-                config.RemoteIpAddress = ipAddress;
-            }
-
-            // Second argument should be remote port
-            if (TryParsePort(args[1], out var remotePort))
-            {
-                config.RemotePort = remotePort;
-            }
-
-            return;
-        }
-
         // Modern format with named parameters
         foreach (var arg in args)
         {
@@ -194,19 +180,27 @@ internal static class Configuration
         // Parameter validation definitions
         var parameterHandlers = new Dictionary<string, (Func<string, object?> parser, Action<ProxyConfiguration, object> setter, string errorMessage)>
         {
-            // IP Address parameter
-            [Constants.App.Endpoint] = (
-                value => IPAddress.TryParse(value, out var ip) ? ip : null,
-                (cfg, val) => cfg.RemoteIpAddress = (IPAddress?)val,
-                // Error message
-                "Invalid remote IP address format: {0}"
-            ),
-                
-            // Remote port parameter
-            [Constants.App.Port] = (
-                value => TryParsePort(value, out var remotePort) ? remotePort : null,
-                (cfg, val) => cfg.RemotePort = (int)val,
-                "Remote port must be between 1 and 65535: {0}"
+            // Endpoints parameter (comma-separated list)
+            ["endpoints"] = (
+                value =>
+                {
+                    var endpoints = new List<RemoteEndpoint>();
+                    var endpointStrings = value.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var endpointStr in endpointStrings)
+                    {
+                        if (TryParseEndpoint(endpointStr, out var endpoint))
+                        {
+                            endpoints.Add(endpoint);
+                        }
+                        else
+                        {
+                            Console.WriteLine($"Warning: Invalid endpoint format in command line: {endpointStr}");
+                        }
+                    }
+                    return endpoints.Count != 0 ? endpoints : null;
+                },
+                (cfg, val) => cfg.RemoteEndpoints.AddRange((List<RemoteEndpoint>)val!),
+                "Invalid format for endpoints: {0}"
             ),
                 
             // Local port parameter
@@ -278,19 +272,6 @@ internal static class Configuration
             return;
         }
 
-        // Handle legacy positional parameters
-        if (config.RemoteIpAddress == null && IPAddress.TryParse(arg, out var ipAddress))
-        {
-            config.RemoteIpAddress = ipAddress;
-            return;
-        }
-            
-        if (config.RemotePort == 0 && TryParsePort(arg, out var port))
-        {
-            config.RemotePort = port;
-            return;
-        }
-
         Console.WriteLine($"Warning: Unrecognized parameter: {arg}");
     }
 
@@ -301,8 +282,7 @@ internal static class Configuration
     {
         // Display current configuration values
         Console.WriteLine("\nCurrent Configuration:");
-        Console.WriteLine($"  Remote Ip Address: {config.RemoteIpAddress}");
-        Console.WriteLine($"  Remote Port: {config.RemotePort}");
+        Console.WriteLine($"  Remote Endpoints: {(config.RemoteEndpoints.Count != 0 ? string.Join(", ", config.RemoteEndpoints.Select(e => $"{e.IpAddress}:{e.Port}")) : "Not set")}");
         Console.WriteLine($"  Local Port: {config.LocalPort} (default: {Constants.Configuration.DefaultLocalPort})");
         Console.WriteLine($"  Buffer Size: {config.BufferSize} bytes (default: {Constants.Configuration.DefaultBufferSize})");
         Console.WriteLine($"  Timeout: {config.Timeout} seconds (default: {Constants.Configuration.DefaultTimeout})");
@@ -318,65 +298,41 @@ internal static class Configuration
 
         var hasRemotePointChanged = false;
 
-        if (config is { RemoteIpAddress: not null, RemotePort: > 0 })
+        if (config.RemoteEndpoints.Count != 0)
         {
-            Console.Write("Would you like to use it with a new remote point? (y/n): ");
+            Console.Write("Would you like to clear existing remote endpoints and add new ones? (y/n): ");
 
             if (Console.ReadLine()?.ToLower(CultureInfo.InvariantCulture) == "y")
             {
-                config.RemoteIpAddress = null;
-                config.RemotePort = 0;
+                config.RemoteEndpoints.Clear();
+                hasRemotePointChanged = true;
             }
         }
 
-        // Prompt for remote IP if not provided or using new remote point
-        if (config.RemoteIpAddress == null)
+        // Prompt for remote endpoints if none are configured
+        if (config.RemoteEndpoints.Count == 0)
         {
-            while (config.RemoteIpAddress == null)
+            Console.WriteLine("Enter remote endpoints in 'ip:port' format. Press Enter on an empty line to finish.");
+            while (true)
             {
-                Console.Write("Enter remote IP address: ");
+                Console.Write("Enter remote endpoint: ");
                 var input = Console.ReadLine();
-                    
+
                 if (string.IsNullOrWhiteSpace(input))
                 {
-                    Console.WriteLine("Remote IP address is required.");
+                    if (config.RemoteEndpoints.Count != 0) break; // Exit if at least one endpoint was added
+                    Console.WriteLine("At least one remote endpoint is required.");
                     continue;
                 }
-                    
-                if (IPAddress.TryParse(input, out var ipAddress))
+
+                if (TryParseEndpoint(input, out var endpoint))
                 {
-                    config.RemoteIpAddress = ipAddress;
+                    config.RemoteEndpoints.Add(endpoint);
                     hasRemotePointChanged = true;
                 }
                 else
                 {
-                    Console.WriteLine("Invalid IP address format. Please try again.");
-                }
-            }
-        }
-
-        // Prompt for remote port if not provided
-        if (config.RemotePort == 0)
-        {
-            while (config.RemotePort == 0)
-            {
-                Console.Write("Enter remote port: ");
-                var input = Console.ReadLine();
-                    
-                if (string.IsNullOrWhiteSpace(input))
-                {
-                    Console.WriteLine("Remote port is required.");
-                    continue;
-                }
-                    
-                if (TryParsePort(input, out var port))
-                {
-                    config.RemotePort = port;
-                    hasRemotePointChanged = true;
-                }
-                else
-                {
-                    Console.WriteLine("Invalid port. Port must be between 1 and 65535.");
+                    Console.WriteLine("Invalid format. Please use 'ip:port' (e.g., 127.0.0.1:8080).");
                 }
             }
         }
@@ -389,7 +345,7 @@ internal static class Configuration
         // Handle settings file options
         if (File.Exists(DefaultSettingsFileName))
         {
-            Console.Write("Remote point has changed. Would you like to update the settings file with current configuration? (y/n): ");
+            Console.Write("Remote endpoints have changed. Would you like to update the settings file with the current configuration? (y/n): ");
 
             if (Console.ReadLine()?.ToLower(CultureInfo.InvariantCulture) == "y")
             {
@@ -398,8 +354,7 @@ internal static class Configuration
         }
         else
         {
-            Console.Write("Save this configuration to settings file? (y/n): ");
-
+            Console.Write("Would you like to save this configuration to a new settings.json file? (y/n): ");
             if (Console.ReadLine()?.ToLower(CultureInfo.InvariantCulture) == "y")
             {
                 SaveToSettingsFile(config);
@@ -407,34 +362,58 @@ internal static class Configuration
         }
     }
 
-    private static bool TryParsePort(string value, out int port)
-    {
-        return int.TryParse(value, out port) && port is >= 1 and <= 65535;
-    }
-
     /// <summary>
-    /// Displays usage information for the application
+    /// Shows application usage instructions
     /// </summary>
     public static void ShowUsage()
     {
-        Console.WriteLine($"\nUsage:");
-        Console.WriteLine($"  tcs {Constants.App.Endpoint}=<RemoteIPAddress> {Constants.App.Port}=<RemotePort> [{Constants.App.LocalPort}=<LocalPort>] [{Constants.App.BufferSize}=<BufferSize>] [{Constants.App.Timeout}=<TimeoutSeconds>] [{Constants.App.EnableFileLogging}=<EnableFileLogging>] [{Constants.App.SeparateDataLogs}=<SeparateDataLogs>] [{Constants.App.LogDataPayload}=<LogDataPayload>]");
-        Console.WriteLine($"\nParameters:");
-        Console.WriteLine($"  {Constants.App.Endpoint}=<RemoteIPAddress>\t- The IP address of the target modem");
-        Console.WriteLine($"  {Constants.App.Port}=<RemotePort>\t\t- The port of the modem to forward traffic to");
-        Console.WriteLine($"  {Constants.App.LocalPort}=<LocalPort>\t\t- (Optional) The local port to listen on (default: {Constants.Configuration.DefaultLocalPort})");
-        Console.WriteLine($"  {Constants.App.BufferSize}=<BufferSize>\t\t- (Optional) Buffer size for data transmission (default: {Constants.Configuration.DefaultBufferSize})");
-        Console.WriteLine($"  {Constants.App.Timeout}=<TimeoutSeconds>\t- (Optional) Connection timeout in seconds (default: {Constants.Configuration.DefaultTimeout})");
-        Console.WriteLine($"  {Constants.App.EnableFileLogging}=<EnableFileLogging>\t- (Optional) Enable file logging (default: {Constants.Configuration.DefaultEnableFileLogging})");
-        Console.WriteLine($"  {Constants.App.SeparateDataLogs}=<SeparateDataLogs>\t- (Optional) Separate data logs (default: {Constants.Configuration.DefaultSeparateDataLogs})");
-        Console.WriteLine($"  {Constants.App.LogDataPayload}=<LogDataPayload>\t- (Optional) Log data payload (default: {Constants.Configuration.DefaultLogDataPayload})");
-        Console.WriteLine($"\nExample:");
-        Console.WriteLine($"  tcs {Constants.App.Endpoint}=192.168.1.45 {Constants.App.Port}=4545 {Constants.App.LocalPort}=1209 {Constants.App.Timeout}=60 {Constants.App.BufferSize}=16384 {Constants.App.EnableFileLogging}=true {Constants.App.SeparateDataLogs}=true {Constants.App.LogDataPayload}=true");
-        Console.WriteLine($"\nConfiguration Sources (in priority order):");
-        Console.WriteLine($"  1. Command-line arguments (highest priority)");
-        Console.WriteLine($"  2. Settings file (tcs-settings.json in the current directory)");
-        Console.WriteLine($"  3. Console input prompts (if required parameters are missing)");
-        Console.WriteLine($"\nAlso supports legacy format:");
-        Console.WriteLine($"  tcs <RemoteIPAddress> <RemotePort>");
+        Console.WriteLine("\nUsage: TransparentCommunicationService [options]");
+        Console.WriteLine("\nOptions:");
+        Console.WriteLine("  endpoints=<ip1:port1>,<ip2:port2>,...   (e.g., endpoints=192.168.1.100:5000,10.0.0.1:5001)");
+        Console.WriteLine($"  localport=<port>                          (default: {Constants.Configuration.DefaultLocalPort})");
+        Console.WriteLine($"  buffersize=<bytes>                      (default: {Constants.Configuration.DefaultBufferSize})");
+        Console.WriteLine($"  timeout=<seconds>                       (default: {Constants.Configuration.DefaultTimeout})");
+        Console.WriteLine("  enablefilelogging=<true|false>            (default: true)");
+        Console.WriteLine("  separatedatalogs=<true|false>             (default: false)");
+        Console.WriteLine("  logdatapayload=<true|false>               (default: true)");
+        Console.WriteLine("\nExample:");
+        Console.WriteLine("  TransparentCommunicationService endpoints=127.0.0.1:8080 localport=9000");
+        Console.WriteLine();
+    }
+
+    /// <summary>
+    /// Tries to parse a string into a port number
+    /// </summary>
+    private static bool TryParsePort(string? input, out int port)
+    {
+        if (int.TryParse(input, out port) && port is >= 1 and <= 65535)
+        {
+            return true;
+        }
+
+        port = 0;
+        return false;
+    }
+    
+    /// <summary>
+    /// Tries to parse an endpoint string (e.g., "127.0.0.1:8080") into a RemoteEndpoint object
+    /// </summary>
+    private static bool TryParseEndpoint(string input, out RemoteEndpoint endpoint)
+    {
+        endpoint = null!;
+        var parts = input.Split(':', StringSplitOptions.TrimEntries);
+
+        if (parts.Length != 2)
+        {
+            return false;
+        }
+
+        if (IPAddress.TryParse(parts[0], out var ipAddress) && TryParsePort(parts[1], out var port))
+        {
+            endpoint = new RemoteEndpoint(ipAddress, port);
+            return true;
+        }
+
+        return false;
     }
 }
