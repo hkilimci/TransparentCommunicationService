@@ -29,10 +29,10 @@ internal sealed class ProxyConfiguration
             {
                 return Path.Combine(Constants.App.LogsDir, "tcs.log");
             }
-                
+
             // Create a safe filename by replacing any invalid characters
-            var safeIp = firstEndpoint.IpAddress.ToString().Replace('.', '-');
-            return Path.Combine(Constants.App.LogsDir, $"tcs_{safeIp}_{firstEndpoint.Port}.log");
+            var safeHost = firstEndpoint.Host.Replace('.', '-').Replace(':', '-').Replace('[', '_').Replace(']', '_');
+            return Path.Combine(Constants.App.LogsDir, $"tcs_{safeHost}_{firstEndpoint.Port}.log");
         }
     }
         
@@ -57,10 +57,10 @@ internal sealed class ProxyConfiguration
             {
                 return Path.Combine(Constants.App.LogsDir, "tcs_data.log");
             }
-                
+
             // Create a safe filename by replacing any invalid characters
-            var safeIp = firstEndpoint.IpAddress.ToString().Replace('.', '-');
-            return Path.Combine(Constants.App.LogsDir, $"tcs_data_{safeIp}_{firstEndpoint.Port}.log");
+            var safeHost = firstEndpoint.Host.Replace('.', '-').Replace(':', '-').Replace('[', '_').Replace(']', '_');
+            return Path.Combine(Constants.App.LogsDir, $"tcs_data_{safeHost}_{firstEndpoint.Port}.log");
         }
     }
         

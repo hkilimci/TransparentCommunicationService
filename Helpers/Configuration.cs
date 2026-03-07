@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Net;
 using System.Text.Json;
 using TransparentCommunicationService.Model;
 
@@ -33,18 +32,16 @@ internal static class Configuration
             LogDataPayload = Constants.Configuration.DefaultLogDataPayload
         };
 
-        if (args.Length == 0)
+        // Always try to load from settings file first (lowest priority)
+        LoadFromSettingsFile(ref config);
+
+        // Apply command line arguments on top (higher priority)
+        if (args.Length > 0)
         {
-            // Try to load from settings file first (lowest priority)
-            LoadFromSettingsFile(ref config);
-        }
-        else
-        {
-            // Then try to parse command line arguments (higher priority)
             TryParseCommandLineArguments(args, ref config);
         }
-        
-        // Finally, prompt for any missing required values (if no command line args provided)
+
+        // Prompt for any missing required values (interactive if no args, or if endpoints still missing)
         if (args.Length == 0 || config.RemoteEndpoints.Count == 0)
         {
             PromptForMissingValues(ref config);
@@ -140,7 +137,7 @@ internal static class Configuration
         {
             var settingsDto = new SettingsFileDto
             {
-                Endpoints = config.RemoteEndpoints.Select(e => $"{e.IpAddress}:{e.Port}").ToList(),
+                Endpoints = config.RemoteEndpoints.Select(e => $"{e.Host}:{e.Port}").ToList(),
                 LocalPort = config.LocalPort,
                 BufferSize = config.BufferSize,
                 Timeout = config.Timeout,
@@ -282,7 +279,7 @@ internal static class Configuration
     {
         // Display current configuration values
         Console.WriteLine("\nCurrent Configuration:");
-        Console.WriteLine($"  Remote Endpoints: {(config.RemoteEndpoints.Count != 0 ? string.Join(", ", config.RemoteEndpoints.Select(e => $"{e.IpAddress}:{e.Port}")) : "Not set")}");
+        Console.WriteLine($"  Remote Endpoints: {(config.RemoteEndpoints.Count != 0 ? string.Join(", ", config.RemoteEndpoints.Select(e => $"{e.Host}:{e.Port}")) : "Not set")}");
         Console.WriteLine($"  Local Port: {config.LocalPort} (default: {Constants.Configuration.DefaultLocalPort})");
         Console.WriteLine($"  Buffer Size: {config.BufferSize} bytes (default: {Constants.Configuration.DefaultBufferSize})");
         Console.WriteLine($"  Timeout: {config.Timeout} seconds (default: {Constants.Configuration.DefaultTimeout})");
@@ -396,24 +393,50 @@ internal static class Configuration
     }
     
     /// <summary>
-    /// Tries to parse an endpoint string (e.g., "127.0.0.1:8080") into a RemoteEndpoint object
+    /// Tries to parse an endpoint string into a RemoteEndpoint object.
+    /// Supported formats:
+    ///   host:port         (e.g., "127.0.0.1:8080", "myserver.local:8080")
+    ///   [ipv6]:port       (e.g., "[::1]:8080")
     /// </summary>
     private static bool TryParseEndpoint(string input, out RemoteEndpoint endpoint)
     {
         endpoint = null!;
-        var parts = input.Split(':', StringSplitOptions.TrimEntries);
+        input = input.Trim();
 
-        if (parts.Length != 2)
+        string host;
+        string portStr;
+
+        // Handle IPv6 bracketed format: [::1]:8080
+        if (input.StartsWith('['))
+        {
+            var closingBracket = input.IndexOf(']');
+            if (closingBracket < 0 || closingBracket + 1 >= input.Length || input[closingBracket + 1] != ':')
+            {
+                return false;
+            }
+
+            host = input.Substring(1, closingBracket - 1);
+            portStr = input.Substring(closingBracket + 2);
+        }
+        else
+        {
+            // Use LastIndexOf so that plain IPv4 and hostnames work; the port is always last
+            var lastColon = input.LastIndexOf(':');
+            if (lastColon < 0)
+            {
+                return false;
+            }
+
+            host = input.Substring(0, lastColon);
+            portStr = input.Substring(lastColon + 1);
+        }
+
+        if (string.IsNullOrWhiteSpace(host) || !TryParsePort(portStr, out var port))
         {
             return false;
         }
 
-        if (IPAddress.TryParse(parts[0], out var ipAddress) && TryParsePort(parts[1], out var port))
-        {
-            endpoint = new RemoteEndpoint(ipAddress, port);
-            return true;
-        }
-
-        return false;
+        endpoint = new RemoteEndpoint(host, port);
+        return true;
     }
 }

@@ -9,6 +9,7 @@ internal static class ConnectionHandler
     public static async Task HandleClientAsync(TcpClient clientConnection, ProxyConfiguration config, CancellationToken token)
     {
         var remoteConnections = new List<TcpClient>();
+        var remoteStreams = new List<NetworkStream>();
 
         try
         {
@@ -16,7 +17,7 @@ internal static class ConnectionHandler
             {
                 throw new InvalidOperationException("At least one remote endpoint must be configured.");
             }
-            
+
             // Connect to all remote endpoints
             foreach (var endpoint in config.RemoteEndpoints)
             {
@@ -28,13 +29,24 @@ internal static class ConnectionHandler
 
                 try
                 {
-                    await remoteConnection.ConnectAsync(endpoint.IpAddress, endpoint.Port, token);
+                    // Apply connect timeout separately from read/write timeout
+                    if (config.Timeout > 0)
+                    {
+                        using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                        connectCts.CancelAfter(TimeSpan.FromSeconds(config.Timeout));
+                        await remoteConnection.ConnectAsync(endpoint.Host, endpoint.Port, connectCts.Token);
+                    }
+                    else
+                    {
+                        await remoteConnection.ConnectAsync(endpoint.Host, endpoint.Port, token);
+                    }
+
                     remoteConnections.Add(remoteConnection);
-                    Logger.LogInfo($"Connected to remote endpoint: {endpoint.IpAddress}:{endpoint.Port}");
+                    Logger.LogInfo($"Connected to remote endpoint: {endpoint.Host}:{endpoint.Port}");
                 }
                 catch (Exception ex)
                 {
-                    Logger.LogError($"Failed to connect to remote endpoint {endpoint.IpAddress}:{endpoint.Port}", ex);
+                    Logger.LogError($"Failed to connect to remote endpoint {endpoint.Host}:{endpoint.Port}", ex);
                     remoteConnection.Close();
                 }
             }
@@ -49,20 +61,29 @@ internal static class ConnectionHandler
 
             // Get network streams
             await using var clientStream = clientConnection.GetStream();
-            var remoteStreams = remoteConnections.Select(rc => rc.GetStream()).ToList();
+            remoteStreams = remoteConnections.Select(rc => rc.GetStream()).ToList();
+
+            // Shared write lock to prevent concurrent writes to clientStream from multiple remotes
+            using var clientWriteLock = new SemaphoreSlim(1, 1);
+
+            // Linked CTS so that when any relay task finishes, the others are cancelled
+            using var relayCts = CancellationTokenSource.CreateLinkedTokenSource(token);
 
             // Create tasks for data relay
-            var clientToRemotesTask = RelayDataToAllAsync(clientStream, remoteStreams, "Client => Remotes", config.BufferSize, token);
-            
-            var remoteToClientTasks = remoteStreams.Select((remoteStream, index) => 
-                RelayDataAsync(remoteStream, clientStream, $"Remote {remoteConnections[index].Client.RemoteEndPoint} => Client", config.BufferSize, token)
+            var clientToRemotesTask = RelayDataToAllAsync(clientStream, remoteStreams, "Client => Remotes", config.BufferSize, relayCts.Token);
+
+            var remoteToClientTasks = remoteStreams.Select((remoteStream, index) =>
+                RelayDataAsync(remoteStream, clientStream, $"Remote {remoteConnections[index].Client.RemoteEndPoint} => Client", config.BufferSize, relayCts.Token, clientWriteLock)
             ).ToList();
 
             // Wait for the client-to-remotes task or any of the remote-to-client tasks to complete
             var allRelayTasks = new List<Task> { clientToRemotesTask };
             allRelayTasks.AddRange(remoteToClientTasks);
-            
+
             await Task.WhenAny(allRelayTasks);
+
+            // Cancel remaining relay tasks cleanly
+            await relayCts.CancelAsync();
         }
         catch (Exception ex) when (ex is SocketException or OperationCanceledException or InvalidOperationException)
         {
@@ -73,6 +94,18 @@ internal static class ConnectionHandler
         }
         finally
         {
+            foreach (var remoteStream in remoteStreams)
+            {
+                try
+                {
+                    await remoteStream.DisposeAsync();
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError("Error disposing remote stream", ex);
+                }
+            }
+
             // Clean up all resources
             foreach (var remoteConnection in remoteConnections)
             {
@@ -85,8 +118,9 @@ internal static class ConnectionHandler
 
     /// <summary>
     /// Relays data from a single source stream to a single destination stream.
+    /// An optional <paramref name="writeLock"/> can be supplied to serialize concurrent writes to a shared destination.
     /// </summary>
-    private static async Task RelayDataAsync(NetworkStream source, NetworkStream destination, string direction, int bufferSize, CancellationToken token)
+    private static async Task RelayDataAsync(NetworkStream source, NetworkStream destination, string direction, int bufferSize, CancellationToken token, SemaphoreSlim? writeLock = null)
     {
         var buffer = new byte[bufferSize];
 
@@ -95,8 +129,24 @@ internal static class ConnectionHandler
             int bytesRead;
             while ((bytesRead = await source.ReadAsync(buffer, token)) > 0)
             {
-                await destination.WriteAsync(buffer.AsMemory(0, bytesRead), token);
-                await destination.FlushAsync(token);
+                if (writeLock != null)
+                {
+                    await writeLock.WaitAsync(token);
+                    try
+                    {
+                        await destination.WriteAsync(buffer.AsMemory(0, bytesRead), token);
+                        await destination.FlushAsync(token);
+                    }
+                    finally
+                    {
+                        writeLock.Release();
+                    }
+                }
+                else
+                {
+                    await destination.WriteAsync(buffer.AsMemory(0, bytesRead), token);
+                    await destination.FlushAsync(token);
+                }
 
                 // Log data for debugging
                 Logger.LogData(direction, buffer, bytesRead);

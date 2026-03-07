@@ -1,9 +1,7 @@
-using System.Net;
-
 namespace TransparentCommunicationService.Model;
 
-public class RemoteEndpoint(IPAddress ipAddress, int port)
+internal class RemoteEndpoint(string host, int port)
 {
-    public IPAddress IpAddress { get; set; } = ipAddress;
+    public string Host { get; set; } = host;
     public int Port { get; set; } = port;
 }

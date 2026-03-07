@@ -8,6 +8,7 @@ internal static class Constants
         public const int DefaultBufferSize = 8192;
         public const int DefaultLocalPort = 1209;
         public const int DefaultTimeout = 30; // Default timeout in seconds
+        public const int MaxConcurrentConnections = 100;
         
         // Default logging values
         public const bool DefaultEnableFileLogging = true;
@@ -21,7 +22,7 @@ internal static class Constants
         public const string Port = "port";
         public const string LocalPort = "localport";
         public const string Timeout = "timeout";
-        public const string BufferSize = "buffer";
+        public const string BufferSize = "buffersize";
         
         public const string LogsDir = "logs";
         // Logging parameters

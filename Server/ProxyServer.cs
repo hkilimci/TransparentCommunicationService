@@ -8,11 +8,16 @@ namespace TransparentCommunicationService.Server;
 
 internal static class ProxyServer
 {
+    // Limits the number of connections handled concurrently
+    private static readonly SemaphoreSlim ConnectionLimiter = new SemaphoreSlim(
+        Constants.Configuration.MaxConcurrentConnections,
+        Constants.Configuration.MaxConcurrentConnections);
+
     public static async Task RunProxyServer(ProxyConfiguration config)
     {
         // Initialize logger
         Logger.Initialize(config);
-        
+
         // Create TCP listener
         using var listener = new TcpListener(IPAddress.Any, config.LocalPort);
         listener.Start();
@@ -34,22 +39,21 @@ internal static class ProxyServer
     private static CancellationTokenSource SetupCancellation()
     {
         var cts = new CancellationTokenSource();
-        
+
         Console.CancelKeyPress += (s, e) =>
         {
             e.Cancel = true; // Prevent the process from terminating immediately
             cts.Cancel();
             Logger.LogInfo("Shutting down...");
 
-            // Ensure the application exits after cleanup
+            // Fallback: force-exit after 1 second if the main loop hasn't returned
             Task.Run(async () =>
             {
-                // Give some time for cleanup operations to complete
-                await Task.Delay(1000, cts.Token);
+                await Task.Delay(1000); // use no token — we want this to run after cancellation
                 Environment.Exit(0);
-            }, cts.Token);
+            });
         };
-        
+
         return cts;
     }
 
@@ -68,8 +72,17 @@ internal static class ProxyServer
                 clientConnection.ReceiveTimeout = config.Timeout * 1000;
                 clientConnection.SendTimeout = config.Timeout * 1000;
 
-                // Handle each client in a separate task
-                _ = ConnectionHandler.HandleClientAsync(clientConnection, config, token);
+                // Throttle concurrent connections; release the slot when the handler finishes
+                await ConnectionLimiter.WaitAsync(token);
+                _ = ConnectionHandler.HandleClientAsync(clientConnection, config, token)
+                    .ContinueWith(t =>
+                    {
+                        ConnectionLimiter.Release();
+                        if (t.IsFaulted)
+                        {
+                            Logger.LogError("Unhandled exception in connection handler", t.Exception?.GetBaseException());
+                        }
+                    }, TaskScheduler.Default);
             }
             catch (Exception ex) when (ex is SocketException or OperationCanceledException)
             {
