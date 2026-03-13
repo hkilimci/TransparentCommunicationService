@@ -15,6 +15,12 @@ internal static class ProxyServer
 
     public static async Task RunProxyServer(ProxyConfiguration config)
     {
+        using var cts = SetupCancellation();
+        await RunProxyServer(config, cts.Token);
+    }
+
+    public static async Task RunProxyServer(ProxyConfiguration config, CancellationToken token)
+    {
         // Initialize logger
         Logger.Initialize(config);
 
@@ -24,11 +30,8 @@ internal static class ProxyServer
 
         Logger.DisplayServerStartInfo(config);
 
-        // Setup cancellation
-        using var cts = SetupCancellation();
-
         // Accept and handle client connections
-        await AcceptClientsLoop(listener, config, cts.Token);
+        await AcceptClientsLoop(listener, config, token);
 
         // Cleanup
         listener.Stop();

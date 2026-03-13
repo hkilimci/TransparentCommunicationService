@@ -1,0 +1,54 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="TransparentCommunicationService.MainWindow"
+        Width="980"
+        Height="720"
+        MinWidth="860"
+        MinHeight="620"
+        Title="Transparent Communication Service">
+  <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="16">
+    <TextBlock Grid.Row="0" FontSize="22" FontWeight="Bold" Text="Transparent Communication Service" />
+
+    <Border Grid.Row="1" Margin="0,12,0,12" Padding="12" BorderThickness="1" CornerRadius="8">
+      <Grid ColumnDefinitions="2*,1*,1*,1*" RowDefinitions="Auto,Auto,Auto,Auto">
+        <TextBlock Grid.Row="0" Grid.Column="0" Text="Remote Endpoints (one per line or comma-separated)" />
+        <TextBlock Grid.Row="0" Grid.Column="1" Margin="12,0,0,0" Text="Local Port" />
+        <TextBlock Grid.Row="0" Grid.Column="2" Margin="12,0,0,0" Text="Buffer Size" />
+        <TextBlock Grid.Row="0" Grid.Column="3" Margin="12,0,0,0" Text="Timeout (s)" />
+
+        <TextBox Name="EndpointsTextBox"
+                 Grid.Row="1"
+                 Grid.Column="0"
+                 Height="96"
+                 AcceptsReturn="True"
+                 TextWrapping="Wrap"
+                 Watermark="127.0.0.1:5000&#10;myserver.local:5001&#10;[::1]:5002" />
+        <TextBox Name="LocalPortTextBox" Grid.Row="1" Grid.Column="1" Margin="12,0,0,0" />
+        <TextBox Name="BufferSizeTextBox" Grid.Row="1" Grid.Column="2" Margin="12,0,0,0" />
+        <TextBox Name="TimeoutTextBox" Grid.Row="1" Grid.Column="3" Margin="12,0,0,0" />
+
+        <CheckBox Name="EnableFileLoggingCheckBox" Grid.Row="2" Grid.Column="0" Margin="0,12,0,0" Content="Enable File Logging" />
+        <CheckBox Name="SeparateDataLogsCheckBox" Grid.Row="2" Grid.Column="1" Margin="12,12,0,0" Content="Separate Data Logs" />
+        <CheckBox Name="LogDataPayloadCheckBox" Grid.Row="2" Grid.Column="2" Margin="12,12,0,0" Content="Log Data Payload" />
+
+        <StackPanel Grid.Row="3" Grid.ColumnSpan="4" Orientation="Horizontal" Margin="0,14,0,0" Spacing="8">
+          <Button Name="ImportButton" Width="130" Content="Import Settings" Click="OnImportClicked" />
+          <Button Name="ExportButton" Width="130" Content="Export Settings" Click="OnExportClicked" />
+          <Button Name="StartButton" Width="120" Content="Start Proxy" Click="OnStartClicked" />
+          <Button Name="StopButton" Width="120" IsEnabled="False" Content="Stop Proxy" Click="OnStopClicked" />
+          <TextBlock Name="StatusTextBlock" VerticalAlignment="Center" Text="Idle" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Border Grid.Row="2" Margin="0,0,0,8" Padding="8,6" BorderThickness="1" CornerRadius="6">
+      <TextBlock Text="Live Logs" FontWeight="SemiBold" />
+    </Border>
+
+    <TextBox Name="LogTextBox"
+             Grid.Row="3"
+             IsReadOnly="True"
+             AcceptsReturn="True"
+             TextWrapping="Wrap" />
+  </Grid>
+</Window>

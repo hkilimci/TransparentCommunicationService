@@ -9,6 +9,7 @@ internal static class Logger
     private static ProxyConfiguration? _config;
     private static readonly object LockObject = new object();
     private static readonly object DataLockObject = new object();
+    public static event Action<string>? LogWritten;
 
     public static void Initialize(ProxyConfiguration config)
     {
@@ -164,6 +165,8 @@ internal static class Logger
     
     private static void WriteLog(string message, ConsoleColor? color = null)
     {
+        LogWritten?.Invoke(message);
+
         if (color.HasValue)
         {
             Console.ForegroundColor = color.Value;

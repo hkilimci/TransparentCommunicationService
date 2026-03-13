@@ -21,16 +21,7 @@ internal static class Configuration
     /// </summary>
     public static ProxyConfiguration LoadConfiguration(string[] args)
     {
-        // Start with default configuration
-        var config = new ProxyConfiguration
-        {
-            BufferSize = Constants.Configuration.DefaultBufferSize,
-            LocalPort = Constants.Configuration.DefaultLocalPort,
-            Timeout = Constants.Configuration.DefaultTimeout,
-            EnableFileLogging = Constants.Configuration.DefaultEnableFileLogging,
-            SeparateDataLogs = Constants.Configuration.DefaultSeparateDataLogs,
-            LogDataPayload = Constants.Configuration.DefaultLogDataPayload
-        };
+        var config = CreateDefaultConfiguration();
 
         // Always try to load from settings file first (lowest priority)
         LoadFromSettingsFile(ref config);
@@ -51,6 +42,94 @@ internal static class Configuration
     }
 
     /// <summary>
+    /// Loads configuration from settings and optional args without interactive console prompts.
+    /// </summary>
+    public static ProxyConfiguration LoadConfigurationForGui(string[]? args = null)
+    {
+        var config = CreateDefaultConfiguration();
+        LoadFromSettingsFile(ref config);
+
+        if (args is { Length: > 0 })
+        {
+            TryParseCommandLineArguments(args, ref config);
+        }
+
+        return config;
+    }
+
+    /// <summary>
+    /// Loads configuration from a specific settings file.
+    /// </summary>
+    public static ProxyConfiguration LoadConfigurationFromFile(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("A settings file path is required.", nameof(filePath));
+        }
+
+        var config = CreateDefaultConfiguration();
+        ApplySettingsDto(ref config, ReadSettingsFile(filePath));
+        return config;
+    }
+
+    /// <summary>
+    /// Saves configuration to the default settings file.
+    /// </summary>
+    public static void SaveConfigurationToFile(ProxyConfiguration config)
+    {
+        SaveConfigurationToFile(config, DefaultSettingsFileName);
+    }
+
+    /// <summary>
+    /// Saves configuration to a specific settings file.
+    /// </summary>
+    public static void SaveConfigurationToFile(ProxyConfiguration config, string filePath)
+    {
+        if (config == null)
+        {
+            throw new ArgumentNullException(nameof(config));
+        }
+
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("A settings file path is required.", nameof(filePath));
+        }
+
+        var settingsDto = CreateSettingsFileDto(config);
+        var jsonContent = JsonSerializer.Serialize(settingsDto, Options);
+        File.WriteAllText(filePath, jsonContent);
+    }
+
+    /// <summary>
+    /// Public wrapper used by GUI input validation.
+    /// </summary>
+    public static bool TryParseEndpointValue(string input, out RemoteEndpoint endpoint)
+    {
+        return TryParseEndpoint(input, out endpoint);
+    }
+
+    /// <summary>
+    /// Public wrapper used by GUI input validation.
+    /// </summary>
+    public static bool TryParsePortValue(string? input, out int port)
+    {
+        return TryParsePort(input, out port);
+    }
+
+    private static ProxyConfiguration CreateDefaultConfiguration()
+    {
+        return new ProxyConfiguration
+        {
+            BufferSize = Constants.Configuration.DefaultBufferSize,
+            LocalPort = Constants.Configuration.DefaultLocalPort,
+            Timeout = Constants.Configuration.DefaultTimeout,
+            EnableFileLogging = Constants.Configuration.DefaultEnableFileLogging,
+            SeparateDataLogs = Constants.Configuration.DefaultSeparateDataLogs,
+            LogDataPayload = Constants.Configuration.DefaultLogDataPayload
+        };
+    }
+
+    /// <summary>
     /// Loads configuration from a settings file if it exists
     /// </summary>
     private static void LoadFromSettingsFile(ref ProxyConfiguration config)
@@ -64,61 +143,7 @@ internal static class Configuration
 
         try
         {
-            var jsonContent = File.ReadAllText(DefaultSettingsFileName);
-            var settingsDto = JsonSerializer.Deserialize<SettingsFileDto>(jsonContent);
-
-            if (settingsDto == null)
-            {
-                Console.WriteLine("Settings file is empty or invalid");
-                return;
-            }
-
-            // Apply settings from file if they exist
-            if (settingsDto.Endpoints != null)
-            {
-                foreach (var endpointStr in settingsDto.Endpoints)
-                {
-                    if (TryParseEndpoint(endpointStr, out var endpoint))
-                    {
-                        config.RemoteEndpoints.Add(endpoint);
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Warning: Invalid endpoint format in settings file: {endpointStr}");
-                    }
-                }
-            }
-
-            if (settingsDto.LocalPort is >= 1 and <= 65535)
-            {
-                config.LocalPort = settingsDto.LocalPort.Value;
-            }
-
-            if (settingsDto.BufferSize is > 0)
-            {
-                config.BufferSize = settingsDto.BufferSize.Value;
-            }
-
-            if (settingsDto.Timeout is >= 0)
-            {
-                config.Timeout = settingsDto.Timeout.Value;
-            }
-            
-            // Apply logging settings if available
-            if (settingsDto.EnableFileLogging.HasValue)
-            {
-                config.EnableFileLogging = settingsDto.EnableFileLogging.Value;
-            }
-            
-            if (settingsDto.SeparateDataLogs.HasValue)
-            {
-                config.SeparateDataLogs = settingsDto.SeparateDataLogs.Value;
-            }
-            
-            if (settingsDto.LogDataPayload.HasValue)
-            {
-                config.LogDataPayload = settingsDto.LogDataPayload.Value;
-            }
+            ApplySettingsDto(ref config, ReadSettingsFile(DefaultSettingsFileName));
 
             Console.WriteLine($"Configuration loaded from settings file: {DefaultSettingsFileName}");
         }
@@ -135,26 +160,86 @@ internal static class Configuration
     {
         try
         {
-            var settingsDto = new SettingsFileDto
-            {
-                Endpoints = config.RemoteEndpoints.Select(e => $"{e.Host}:{e.Port}").ToList(),
-                LocalPort = config.LocalPort,
-                BufferSize = config.BufferSize,
-                Timeout = config.Timeout,
-                EnableFileLogging = config.EnableFileLogging,
-                SeparateDataLogs = config.SeparateDataLogs,
-                LogDataPayload = config.LogDataPayload
-            };
-
-            var jsonContent = JsonSerializer.Serialize(settingsDto, Options);
-            File.WriteAllText(DefaultSettingsFileName, jsonContent);
-
+            SaveConfigurationToFile(config);
             Console.WriteLine($"Configuration saved to: {DefaultSettingsFileName}");
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error saving settings file: {ex.Message}");
         }
+    }
+
+    private static SettingsFileDto ReadSettingsFile(string filePath)
+    {
+        var jsonContent = File.ReadAllText(filePath);
+        var settingsDto = JsonSerializer.Deserialize<SettingsFileDto>(jsonContent);
+
+        return settingsDto ?? throw new InvalidDataException("Settings file is empty or invalid.");
+    }
+
+    private static void ApplySettingsDto(ref ProxyConfiguration config, SettingsFileDto settingsDto)
+    {
+        if (settingsDto.Endpoints != null)
+        {
+            var endpoints = new List<RemoteEndpoint>();
+            foreach (var endpointStr in settingsDto.Endpoints)
+            {
+                if (TryParseEndpoint(endpointStr, out var endpoint))
+                {
+                    endpoints.Add(endpoint);
+                }
+                else
+                {
+                    Console.WriteLine($"Warning: Invalid endpoint format in settings file: {endpointStr}");
+                }
+            }
+
+            config.RemoteEndpoints = endpoints;
+        }
+
+        if (settingsDto.LocalPort is >= 1 and <= 65535)
+        {
+            config.LocalPort = settingsDto.LocalPort.Value;
+        }
+
+        if (settingsDto.BufferSize is > 0)
+        {
+            config.BufferSize = settingsDto.BufferSize.Value;
+        }
+
+        if (settingsDto.Timeout is >= 0)
+        {
+            config.Timeout = settingsDto.Timeout.Value;
+        }
+
+        if (settingsDto.EnableFileLogging.HasValue)
+        {
+            config.EnableFileLogging = settingsDto.EnableFileLogging.Value;
+        }
+
+        if (settingsDto.SeparateDataLogs.HasValue)
+        {
+            config.SeparateDataLogs = settingsDto.SeparateDataLogs.Value;
+        }
+
+        if (settingsDto.LogDataPayload.HasValue)
+        {
+            config.LogDataPayload = settingsDto.LogDataPayload.Value;
+        }
+    }
+
+    private static SettingsFileDto CreateSettingsFileDto(ProxyConfiguration config)
+    {
+        return new SettingsFileDto
+        {
+            Endpoints = config.RemoteEndpoints.Select(e => $"{e.Host}:{e.Port}").ToList(),
+            LocalPort = config.LocalPort,
+            BufferSize = config.BufferSize,
+            Timeout = config.Timeout,
+            EnableFileLogging = config.EnableFileLogging,
+            SeparateDataLogs = config.SeparateDataLogs,
+            LogDataPayload = config.LogDataPayload
+        };
     }
 
     /// <summary>
